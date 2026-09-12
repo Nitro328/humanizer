@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+
+# Buildozer / build artifacts
+.venv/
+bin/
+.buildozer/
+*.apk
+
+# Backup copy (not needed for the build)
+pixel - Copia.py
