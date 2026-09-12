@@ -1,20 +1,23 @@
 @echo off
 setlocal
 
+set "GH=gh"
+where gh >nul 2>nul || set "GH=C:\Program Files\GitHub CLI\gh.exe"
+
 echo === Push project to GitHub ===
 echo.
 echo This will open a browser so you can log in to GitHub (one time only).
 echo If you do not have a GitHub account yet, the browser lets you create one.
 echo.
 
-gh auth status >nul 2>nul
+"%GH%" auth status >nul 2>nul
 if errorlevel 1 (
-    gh auth login --hostname github.com --git-protocol https --web
+    "%GH%" auth login --hostname github.com --git-protocol https --web
 )
 
 echo.
 echo Creating the repository and pushing the code...
-gh repo create humanizer --public --source=. --push
+"%GH%" repo create humanizer --public --source=. --push
 
 echo.
 echo Done. Now:
