@@ -6,7 +6,9 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # ubuntu-22.04: python-for-android's libffi recipe fails on 24.04
+    # (autoconf 2.72 -> LT_SYS_SYMBOL_USCORE / LIBFFI_ENABLE_SYMVERS errors).
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
