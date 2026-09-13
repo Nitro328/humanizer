@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Humanizer - Kivy app.
+"""Humanizer - Kivy app (Android).
 
-Pick an AI-generated image, process it through the deterministic core and
-save the humanized copy to the phone's Downloads folder.
+Pick an image, process it through the deterministic core and save the
+humanized copy to the phone's Downloads folder.
 """
 import os
 import threading
@@ -14,20 +14,54 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.image import Image
 from kivy.uix.label import Label
-from kivy.graphics import Color, Rectangle
+from kivy.graphics import Color, RoundedRectangle, Line
 
 import pixel
 import android_io
 
 COLORS = {
-    "primary": (0.20, 0.40, 0.95, 1.0),
+    "primary": (0.19, 0.42, 0.95, 1.0),
     "on_primary": (1.0, 1.0, 1.0, 1.0),
     "surface": (0.98, 0.98, 1.0, 1.0),
-    "surface_container": (0.92, 0.94, 0.98, 1.0),
+    "surface_container": (0.93, 0.94, 0.98, 1.0),
     "on_surface": (0.10, 0.11, 0.14, 1.0),
-    "on_surface_variant": (0.44, 0.46, 0.52, 1.0),
+    "on_surface_variant": (0.45, 0.47, 0.53, 1.0),
+    "outline": (0.72, 0.74, 0.80, 1.0),
     "error": (0.73, 0.18, 0.16, 1.0),
 }
+
+
+class RoundedButton(Button):
+    """Flat button with rounded corners; filled or outlined."""
+
+    def __init__(self, filled=True, **kwargs):
+        kwargs.setdefault("background_normal", "")
+        kwargs.setdefault("background_down", "")
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(56))
+        kwargs.setdefault("font_size", sp(16))
+        self.filled = filled
+        self.radius = dp(14)
+        super().__init__(**kwargs)
+        self.bind(pos=self._redraw, size=self._redraw, disabled=self._redraw)
+        self._redraw()
+
+    def _redraw(self, *args):
+        self.canvas.before.clear()
+        if self.filled:
+            bg = list(COLORS["primary"])
+            if self.disabled:
+                bg[3] = 0.4
+            with self.canvas.before:
+                Color(*bg)
+                RoundedRectangle(pos=self.pos, size=self.size, radius=[self.radius])
+        else:
+            with self.canvas.before:
+                Color(*COLORS["outline"])
+                Line(
+                    rounded_rectangle=(self.x, self.y, self.width, self.height, self.radius),
+                    width=1.2,
+                )
 
 
 class RootWidget(BoxLayout):
@@ -45,6 +79,13 @@ class RootWidget(BoxLayout):
         self._build_ui()
         self._update_ui()
 
+        if android_io.IS_ANDROID:
+            try:
+                from android import activity
+                activity.bind(on_activity_result=self._on_activity_result)
+            except Exception as e:  # noqa: BLE001
+                print("[humanizer] activity.bind failed:", e)
+
     # ------------------------------------------------------------------ UI
     def _build_ui(self):
         title = Label(
@@ -52,7 +93,7 @@ class RootWidget(BoxLayout):
             font_size=sp(30),
             bold=True,
             size_hint_y=None,
-            height=dp(44),
+            height=dp(46),
             halign="left",
             valign="middle",
             color=COLORS["on_surface"],
@@ -61,7 +102,7 @@ class RootWidget(BoxLayout):
         self.add_widget(title)
 
         subtitle = Label(
-            text="Pick an AI-generated image and get a humanized copy.",
+            text="Pick an AI image, get a humanized copy.",
             font_size=sp(14),
             size_hint_y=None,
             height=dp(24),
@@ -72,12 +113,9 @@ class RootWidget(BoxLayout):
         subtitle.bind(size=lambda *_: setattr(subtitle, "text_size", subtitle.size))
         self.add_widget(subtitle)
 
-        # Preview area
+        # Preview card
         self.preview_box = BoxLayout(size_hint_y=1)
-        with self.preview_box.canvas.before:
-            Color(*COLORS["surface_container"])
-            self._bg = Rectangle(pos=self.preview_box.pos, size=self.preview_box.size)
-        self.preview_box.bind(pos=self._update_bg, size=self._update_bg)
+        self.preview_box.bind(pos=self._draw_card, size=self._draw_card)
         self.add_widget(self.preview_box)
 
         self.placeholder = Label(
@@ -95,7 +133,7 @@ class RootWidget(BoxLayout):
         self.preview = Image(fit_mode="contain")
         self.preview_box.add_widget(self.preview)
 
-        # Status / message line
+        # Status line
         self.status_label = Label(
             text="",
             font_size=sp(14),
@@ -109,30 +147,24 @@ class RootWidget(BoxLayout):
         )
         self.add_widget(self.status_label)
 
-        # Buttons (secondary above primary, so the primary CTA sits at the
-        # bottom, inside the thumb zone).
-        self.secondary = self._make_button("", (1, 1, 1, 0), COLORS["primary"])
+        # Buttons (secondary above primary, primary sits in the thumb zone)
+        self.secondary = RoundedButton(filled=False, text="")
+        self.secondary.color = COLORS["primary"]
         self.secondary.bind(on_release=self._on_secondary)
         self.add_widget(self.secondary)
 
-        self.primary = self._make_button("Choose image", COLORS["primary"], COLORS["on_primary"])
+        self.primary = RoundedButton(filled=True, text="Choose image")
+        self.primary.color = COLORS["on_primary"]
         self.primary.bind(on_release=self._on_primary)
         self.add_widget(self.primary)
 
-    def _make_button(self, text, bg, fg):
-        return Button(
-            text=text,
-            size_hint_y=None,
-            height=dp(56),
-            font_size=sp(16),
-            background_normal="",
-            background_color=bg,
-            color=fg,
-        )
-
-    def _update_bg(self, *args):
-        self._bg.pos = self.preview_box.pos
-        self._bg.size = self.preview_box.size
+    def _draw_card(self, *args):
+        self.preview_box.canvas.before.clear()
+        with self.preview_box.canvas.before:
+            Color(*COLORS["surface_container"])
+            RoundedRectangle(
+                pos=self.preview_box.pos, size=self.preview_box.size, radius=[dp(18)]
+            )
 
     # ------------------------------------------------------------- state
     def _update_ui(self):
@@ -170,7 +202,7 @@ class RootWidget(BoxLayout):
             self._set_secondary("New image", True)
 
         elif s == "error":
-            self.status_label.text = "Error: " + self.message
+            self.status_label.text = self.message
             self.status_label.color = COLORS["error"]
             self.primary.text = "Choose image"
             self.primary.disabled = False
@@ -200,28 +232,56 @@ class RootWidget(BoxLayout):
             self.reset()
 
     def choose_image(self):
-        from plyer import filechooser
-        filechooser.open_file(
-            on_selection=self._on_pick,
-            filters=[("JPEG images", "*.jpg", "*.jpeg")],
-        )
-
-    def _on_pick(self, selection):
-        if not selection:
+        if not android_io.IS_ANDROID:
+            self._show_error("Image picking works only on Android.")
             return
-        uri_or_path = selection[0]
+        try:
+            from jnius import autoclass, cast
+            Intent = autoclass("android.content.Intent")
+            intent = Intent(Intent.ACTION_GET_CONTENT)
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.setType("image/*")
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            currentActivity = cast("android.app.Activity", PythonActivity.mActivity)
+            currentActivity.startActivityForResult(intent, 0x1001)
+            print("[humanizer] picker launched")
+        except Exception as e:  # noqa: BLE001
+            print("[humanizer] choose_image error:", e)
+            self._show_error("Could not open the picker: " + str(e))
 
-        name = os.path.basename(android_io.get_display_name(uri_or_path))
-        cache = App.get_running_app().user_data_dir
-        dest = os.path.join(cache, name)
-        resolved = android_io.resolve_input(uri_or_path, dest)
+    def _on_activity_result(self, request_code, result_code, data):
+        print("[humanizer] on_activity_result", request_code, result_code, data)
+        if data is None:
+            print("[humanizer] result data is None (cancelled?)")
+            return
+        try:
+            uri = data.getData()
+            if uri is None:
+                print("[humanizer] result uri is None")
+                return
+            self._process_picked(uri.toString())
+        except Exception as e:  # noqa: BLE001
+            print("[humanizer] result error:", e)
+            self._show_error("Error reading the picker result: " + str(e))
 
-        self.input_path = resolved
-        self.output_path = ""
-        self.message = ""
-        self._set_preview(resolved)
-        self.status = "ready"
-        self._update_ui()
+    def _process_picked(self, uri_str):
+        try:
+            name = os.path.basename(android_io.get_display_name(uri_str))
+            cache = App.get_running_app().user_data_dir
+            dest = os.path.join(cache, name)
+            print("[humanizer] picked", uri_str, "->", dest)
+            if not android_io.copy_uri_to_file(uri_str, dest):
+                self._show_error("Could not read the selected image.")
+                return
+            self.input_path = dest
+            self.output_path = ""
+            self.message = ""
+            self._set_preview(dest)
+            self.status = "ready"
+            self._update_ui()
+        except Exception as e:  # noqa: BLE001
+            print("[humanizer] process_picked error:", e)
+            self._show_error("Error: " + str(e))
 
     def humanize(self):
         if not self.input_path:
@@ -234,6 +294,7 @@ class RootWidget(BoxLayout):
         try:
             out = pixel.process_image(self.input_path)
         except Exception as exc:  # noqa: BLE001
+            print("[humanizer] process error:", exc)
             self._on_error(str(exc))
             return
         self._on_done(out)
@@ -247,7 +308,7 @@ class RootWidget(BoxLayout):
 
     @mainthread
     def _on_error(self, msg):
-        self.message = msg
+        self.message = "Error: " + msg
         self.status = "error"
         self._update_ui()
 
@@ -269,6 +330,11 @@ class RootWidget(BoxLayout):
         self.message = ""
         self.status = "empty"
         self._set_preview("")
+        self._update_ui()
+
+    def _show_error(self, msg):
+        self.message = msg
+        self.status = "error"
         self._update_ui()
 
     def _set_preview(self, path):

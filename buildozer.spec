@@ -21,7 +21,7 @@ version = 0.1
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
 # NOTE: python3 must stay unpinned (it auto-matches hostpython3 3.14.2).
-requirements = python3,kivy,opencv,numpy,pillow,plyer,pyjnius
+requirements = python3,kivy,opencv,numpy,pillow,pyjnius
 
 # (str) Supported orientation (one of landscape, sensorLandscape, portrait or all)
 orientation = portrait

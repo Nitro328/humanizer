@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Android-specific I/O helpers.
-
-These functions are pass-through no-ops on desktop and only activate the
-pyjnius / MediaStore code path on Android. The Kivy UI calls them so that the
-same app runs both locally (for testing) and on the device.
-"""
+"""Android-specific I/O helpers (pass-through no-ops on desktop)."""
 import os
 
 from kivy.utils import platform
@@ -12,10 +7,10 @@ from kivy.utils import platform
 IS_ANDROID = platform == "android"
 
 
-def get_display_name(uri_or_path):
+def get_display_name(uri_str):
     """Return the original filename for a path or a content:// URI."""
-    if not uri_or_path.startswith("content://"):
-        return os.path.basename(uri_or_path)
+    if not uri_str.startswith("content://"):
+        return os.path.basename(uri_str)
 
     name = None
     try:
@@ -25,7 +20,7 @@ def get_display_name(uri_or_path):
         Uri = autoclass("android.net.Uri")
         OpenableColumns = autoclass("android.provider.OpenableColumns")
 
-        cursor = resolver.query(Uri.parse(uri_or_path), None, None, None, None)
+        cursor = resolver.query(Uri.parse(uri_str), None, None, None, None)
         if cursor is not None:
             idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if idx >= 0 and cursor.moveToFirst():
@@ -37,20 +32,44 @@ def get_display_name(uri_or_path):
     return name or "image.jpg"
 
 
-def resolve_input(uri_or_path, dest):
-    """Return a real file path readable by cv2.
+def copy_uri_to_file(uri_str, dest):
+    """Copy a content:// URI into a local file. Returns True on success."""
+    if not IS_ANDROID:
+        return False
 
-    If the input is a content:// URI, copy its bytes to ``dest`` and return
-    that path. Otherwise return the original path unchanged.
-    """
-    if not uri_or_path.startswith("content://"):
-        return uri_or_path
-    _copy_uri_to_file(uri_or_path, dest)
-    return dest
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        resolver = PythonActivity.mActivity.getContentResolver()
+        Uri = autoclass("android.net.Uri")
+
+        inp = resolver.openInputStream(Uri.parse(uri_str))
+        if inp is None:
+            return False
+
+        FileOutputStream = autoclass("java.io.FileOutputStream")
+        out = FileOutputStream(dest)
+
+        Byte = autoclass("java.lang.Byte")
+        Array = autoclass("java.lang.reflect.Array")
+        buf = Array.newInstance(Byte.TYPE, 8192)
+
+        try:
+            while True:
+                n = inp.read(buf)
+                if n <= 0:
+                    break
+                out.write(buf, 0, n)
+        finally:
+            out.close()
+            inp.close()
+        return True
+    except Exception:
+        return False
 
 
 def save_to_downloads(src_path, display_name):
-    """Copy ``src_path`` into the public Downloads folder (Android 10+)."""
+    """Copy src_path into the public Downloads folder (Android 10+)."""
     if not IS_ANDROID:
         return False
 
@@ -83,28 +102,3 @@ def save_to_downloads(src_path, display_name):
         return True
     except Exception:
         return False
-
-
-def _copy_uri_to_file(uri, dest):
-    from jnius import autoclass
-    PythonActivity = autoclass("org.kivy.android.PythonActivity")
-    resolver = PythonActivity.mActivity.getContentResolver()
-    Uri = autoclass("android.net.Uri")
-
-    inp = resolver.openInputStream(Uri.parse(uri))
-    FileOutputStream = autoclass("java.io.FileOutputStream")
-    out = FileOutputStream(dest)
-
-    Byte = autoclass("java.lang.Byte")
-    Array = autoclass("java.lang.reflect.Array")
-    buf = Array.newInstance(Byte.TYPE, 8192)
-
-    try:
-        while True:
-            n = inp.read(buf)
-            if n <= 0:
-                break
-            out.write(buf, 0, n)
-    finally:
-        out.close()
-        inp.close()
