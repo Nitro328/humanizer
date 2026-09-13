@@ -47,23 +47,15 @@ def copy_uri_to_file(uri_str, dest):
         if inp is None:
             return False
 
-        FileOutputStream = autoclass("java.io.FileOutputStream")
-        out = FileOutputStream(dest)
+        # Use Files.copy(InputStream, Path) — reliable, avoids manual byte[] loops
+        # (which silently wrote zeros through pyjnius on some devices).
+        Files = autoclass("java.nio.file.Files")
+        Paths = autoclass("java.nio.file.Paths")
+        StandardCopyOption = autoclass("java.nio.file.StandardCopyOption")
+        Files.copy(inp, Paths.get(dest), StandardCopyOption.REPLACE_EXISTING)
+        inp.close()
 
-        Byte = autoclass("java.lang.Byte")
-        Array = autoclass("java.lang.reflect.Array")
-        buf = Array.newInstance(Byte.TYPE, 8192)
-
-        try:
-            while True:
-                n = inp.read(buf)
-                if n <= 0:
-                    break
-                out.write(buf, 0, n)
-        finally:
-            out.close()
-            inp.close()
-        return True
+        return os.path.getsize(dest) > 0
     except Exception:
         return False
 

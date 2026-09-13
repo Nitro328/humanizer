@@ -37,6 +37,7 @@ class RoundedButton(Button):
     def __init__(self, filled=True, **kwargs):
         kwargs.setdefault("background_normal", "")
         kwargs.setdefault("background_down", "")
+        kwargs.setdefault("background_color", (0, 0, 0, 0))
         kwargs.setdefault("size_hint_y", None)
         kwargs.setdefault("height", dp(56))
         kwargs.setdefault("font_size", sp(16))
@@ -249,6 +250,7 @@ class RootWidget(BoxLayout):
             print("[humanizer] choose_image error:", e)
             self._show_error("Could not open the picker: " + str(e))
 
+    @mainthread
     def _on_activity_result(self, request_code, result_code, data):
         print("[humanizer] on_activity_result", request_code, result_code, data)
         if data is None:
