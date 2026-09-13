@@ -20,7 +20,9 @@ version = 0.1
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy,opencv,numpy,pillow,plyer,pyjnius
+# NOTE: python3 is pinned to 3.11 because Python 3.14's pip breaks
+# during "pip install -U pip" (BuildDependencyInstallError ImportError).
+requirements = python3==3.11.9,kivy,opencv,numpy,pillow,plyer,pyjnius
 
 # (str) Supported orientation (one of landscape, sensorLandscape, portrait or all)
 orientation = portrait
