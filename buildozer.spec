@@ -44,7 +44,8 @@ android.api = 34
 android.minapi = 29
 
 # (list) Architecture(s) to build for
-android.archs = arm64-v8a, armeabi-v7a
+# arm64-v8a only: covers all modern phones and halves the OpenCV build time.
+android.archs = arm64-v8a
 
 # (bool) Automatically accept the Android SDK license agreements
 android.accept_sdk_license = True

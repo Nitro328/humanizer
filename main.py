@@ -14,7 +14,6 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.image import Image
 from kivy.uix.label import Label
-from kivy.graphics import Color, RoundedRectangle, Line
 
 import pixel
 import android_io
@@ -31,38 +30,18 @@ COLORS = {
 }
 
 
-class RoundedButton(Button):
-    """Flat button with rounded corners; filled or outlined."""
-
-    def __init__(self, filled=True, **kwargs):
-        kwargs.setdefault("background_normal", "")
-        kwargs.setdefault("background_down", "")
-        kwargs.setdefault("background_color", (0, 0, 0, 0))
-        kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("height", dp(56))
-        kwargs.setdefault("font_size", sp(16))
-        self.filled = filled
-        self.radius = dp(14)
-        super().__init__(**kwargs)
-        self.bind(pos=self._redraw, size=self._redraw, disabled=self._redraw)
-        self._redraw()
-
-    def _redraw(self, *args):
-        self.canvas.before.clear()
-        if self.filled:
-            bg = list(COLORS["primary"])
-            if self.disabled:
-                bg[3] = 0.4
-            with self.canvas.before:
-                Color(*bg)
-                RoundedRectangle(pos=self.pos, size=self.size, radius=[self.radius])
-        else:
-            with self.canvas.before:
-                Color(*COLORS["outline"])
-                Line(
-                    rounded_rectangle=(self.x, self.y, self.width, self.height, self.radius),
-                    width=1.2,
-                )
+def _flat_button(text, bg, fg):
+    """Plain flat button (guaranteed to render on Android)."""
+    return Button(
+        text=text,
+        size_hint_y=None,
+        height=dp(56),
+        font_size=sp(16),
+        background_normal="",
+        background_down="",
+        background_color=bg,
+        color=fg,
+    )
 
 
 class RootWidget(BoxLayout):
@@ -114,9 +93,8 @@ class RootWidget(BoxLayout):
         subtitle.bind(size=lambda *_: setattr(subtitle, "text_size", subtitle.size))
         self.add_widget(subtitle)
 
-        # Preview card
+        # Preview area
         self.preview_box = BoxLayout(size_hint_y=1)
-        self.preview_box.bind(pos=self._draw_card, size=self._draw_card)
         self.add_widget(self.preview_box)
 
         self.placeholder = Label(
@@ -149,23 +127,13 @@ class RootWidget(BoxLayout):
         self.add_widget(self.status_label)
 
         # Buttons (secondary above primary, primary sits in the thumb zone)
-        self.secondary = RoundedButton(filled=False, text="")
-        self.secondary.color = COLORS["primary"]
+        self.secondary = _flat_button("", COLORS["surface_container"], COLORS["primary"])
         self.secondary.bind(on_release=self._on_secondary)
         self.add_widget(self.secondary)
 
-        self.primary = RoundedButton(filled=True, text="Choose image")
-        self.primary.color = COLORS["on_primary"]
+        self.primary = _flat_button("Choose image", COLORS["primary"], COLORS["on_primary"])
         self.primary.bind(on_release=self._on_primary)
         self.add_widget(self.primary)
-
-    def _draw_card(self, *args):
-        self.preview_box.canvas.before.clear()
-        with self.preview_box.canvas.before:
-            Color(*COLORS["surface_container"])
-            RoundedRectangle(
-                pos=self.preview_box.pos, size=self.preview_box.size, radius=[dp(18)]
-            )
 
     # ------------------------------------------------------------- state
     def _update_ui(self):
@@ -250,7 +218,6 @@ class RootWidget(BoxLayout):
             print("[humanizer] choose_image error:", e)
             self._show_error("Could not open the picker: " + str(e))
 
-    @mainthread
     def _on_activity_result(self, request_code, result_code, data):
         print("[humanizer] on_activity_result", request_code, result_code, data)
         if data is None:
@@ -261,29 +228,42 @@ class RootWidget(BoxLayout):
             if uri is None:
                 print("[humanizer] result uri is None")
                 return
-            self._process_picked(uri.toString())
+            uri_str = uri.toString()
         except Exception as e:  # noqa: BLE001
             print("[humanizer] result error:", e)
             self._show_error("Error reading the picker result: " + str(e))
+            return
 
-    def _process_picked(self, uri_str):
+        # Copy on a background thread; touch UI only on the main thread.
+        threading.Thread(target=self._copy_picked, args=(uri_str,), daemon=True).start()
+
+    def _copy_picked(self, uri_str):
         try:
             name = os.path.basename(android_io.get_display_name(uri_str))
-            cache = App.get_running_app().user_data_dir
-            dest = os.path.join(cache, name)
+            dest = os.path.join(App.get_running_app().user_data_dir, name)
             print("[humanizer] picked", uri_str, "->", dest)
-            if not android_io.copy_uri_to_file(uri_str, dest):
-                self._show_error("Could not read the selected image.")
-                return
-            self.input_path = dest
-            self.output_path = ""
-            self.message = ""
-            self._set_preview(dest)
-            self.status = "ready"
-            self._update_ui()
+            ok = android_io.copy_uri_to_file(uri_str, dest)
         except Exception as e:  # noqa: BLE001
-            print("[humanizer] process_picked error:", e)
-            self._show_error("Error: " + str(e))
+            print("[humanizer] copy error:", e)
+            self._on_pick_error("Could not read the selected image.")
+            return
+        if not ok:
+            self._on_pick_error("Could not read the selected image.")
+            return
+        self._on_pick_ready(dest)
+
+    @mainthread
+    def _on_pick_ready(self, dest):
+        self.input_path = dest
+        self.output_path = ""
+        self.message = ""
+        self._set_preview(dest)
+        self.status = "ready"
+        self._update_ui()
+
+    @mainthread
+    def _on_pick_error(self, msg):
+        self._show_error(msg)
 
     def humanize(self):
         if not self.input_path:

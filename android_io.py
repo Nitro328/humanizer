@@ -38,22 +38,22 @@ def copy_uri_to_file(uri_str, dest):
         return False
 
     try:
+        import shutil
         from jnius import autoclass
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
         resolver = PythonActivity.mActivity.getContentResolver()
         Uri = autoclass("android.net.Uri")
 
-        inp = resolver.openInputStream(Uri.parse(uri_str))
-        if inp is None:
+        pfd = resolver.openFileDescriptor(Uri.parse(uri_str), "r")
+        if pfd is None:
             return False
 
-        # Use Files.copy(InputStream, Path) — reliable, avoids manual byte[] loops
-        # (which silently wrote zeros through pyjnius on some devices).
-        Files = autoclass("java.nio.file.Files")
-        Paths = autoclass("java.nio.file.Paths")
-        StandardCopyOption = autoclass("java.nio.file.StandardCopyOption")
-        Files.copy(inp, Paths.get(dest), StandardCopyOption.REPLACE_EXISTING)
-        inp.close()
+        # Pure-Python copy from the native file descriptor. Avoids pyjnius
+        # byte[] pitfalls and java.nio.file (incomplete on Android).
+        fd = pfd.getFd()
+        with os.fdopen(fd, "rb") as src, open(dest, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        pfd.close()
 
         return os.path.getsize(dest) > 0
     except Exception:
