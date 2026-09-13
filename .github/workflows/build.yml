@@ -31,6 +31,20 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install buildozer cython
 
+      - name: Patch p4a (avoid broken pip self-upgrade)
+        run: |
+          python - <<'PY'
+          import pythonforandroid.build as b
+          path = b.__file__
+          src = open(path).read()
+          before = "pip install -U pip"
+          after = "pip install pip==24.3.1"
+          if before not in src:
+              raise SystemExit("target string not found in " + path)
+          open(path, "w").write(src.replace(before, after))
+          print("patched", path)
+          PY
+
       - name: Build APK
         run: buildozer -v android debug
 
