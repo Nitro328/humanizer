@@ -38,22 +38,27 @@ def copy_uri_to_file(uri_str, dest):
         return False
 
     try:
-        import shutil
         from jnius import autoclass
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
         resolver = PythonActivity.mActivity.getContentResolver()
         Uri = autoclass("android.net.Uri")
+        BitmapFactory = autoclass("android.graphics.BitmapFactory")
+        CompressFormat = autoclass("android.graphics.Bitmap$CompressFormat")
+        FileOutputStream = autoclass("java.io.FileOutputStream")
 
-        pfd = resolver.openFileDescriptor(Uri.parse(uri_str), "r")
-        if pfd is None:
+        inp = resolver.openInputStream(Uri.parse(uri_str))
+        if inp is None:
             return False
 
-        # Pure-Python copy from the native file descriptor. Avoids pyjnius
-        # byte[] pitfalls and java.nio.file (incomplete on Android).
-        fd = pfd.getFd()
-        with os.fdopen(fd, "rb") as src, open(dest, "wb") as dst:
-            shutil.copyfileobj(src, dst)
-        pfd.close()
+        bitmap = BitmapFactory.decodeStream(inp)
+        inp.close()
+        if bitmap is None:
+            return False
+
+        out = FileOutputStream(dest)
+        bitmap.compress(CompressFormat.PNG, 100, out)
+        out.close()
+        bitmap.recycle()
 
         return os.path.getsize(dest) > 0
     except Exception:
@@ -71,8 +76,8 @@ def save_to_downloads(src_path, display_name):
         resolver = PythonActivity.mActivity.getContentResolver()
         ContentValues = autoclass("android.content.ContentValues")
         Environment = autoclass("android.os.Environment")
-        Files = autoclass("java.nio.file.Files")
-        Paths = autoclass("java.nio.file.Paths")
+        BitmapFactory = autoclass("android.graphics.BitmapFactory")
+        CompressFormat = autoclass("android.graphics.Bitmap$CompressFormat")
         Downloads = autoclass("android.provider.MediaStore$Downloads")
 
         values = ContentValues()
@@ -87,10 +92,15 @@ def save_to_downloads(src_path, display_name):
         out = resolver.openOutputStream(uri)
         if out is None:
             return False
-        try:
-            Files.copy(Paths.get(src_path), out)
-        finally:
+
+        bitmap = BitmapFactory.decodeFile(src_path)
+        if bitmap is None:
             out.close()
-        return True
+            return False
+
+        ok = bitmap.compress(CompressFormat.JPEG, 95, out)
+        out.close()
+        bitmap.recycle()
+        return bool(ok)
     except Exception:
         return False
