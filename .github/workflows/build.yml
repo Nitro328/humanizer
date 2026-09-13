@@ -31,20 +31,6 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install buildozer cython
 
-      - name: Clone and patch p4a
-        run: |
-          git clone --depth 1 https://github.com/kivy/python-for-android.git /home/runner/p4a
-          python - <<'PY'
-          path = "/home/runner/p4a/pythonforandroid/build.py"
-          src = open(path).read()
-          before = "pip install -U pip"
-          after = "python -m pip install -U pip"
-          if before not in src:
-              raise SystemExit("target string not found in " + path)
-          open(path, "w").write(src.replace(before, after))
-          print("patched", path)
-          PY
-
       - name: Build APK
         run: buildozer -v android debug
 

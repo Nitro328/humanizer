@@ -49,8 +49,8 @@ android.archs = arm64-v8a, armeabi-v7a
 # (bool) Automatically accept the Android SDK license agreements
 android.accept_sdk_license = True
 
-# Use a locally-cloned (and patched) python-for-android instead of downloading it.
-p4a.source_dir = /home/runner/p4a
+# Use the develop branch: master still runs the broken "pip install -U pip".
+p4a.branch = develop
 
 
 [buildozer]
